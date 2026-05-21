@@ -55,10 +55,12 @@ Adjacent vibration windows from the same recording are temporally correlated. Ra
 
 | Model | RMSE (cycles) | MAE (cycles) | NASA Score |
 |-------|--------------|-------------|------------|
-| XGBoost (300 trees, window=30) | **16.80** ✅ | 12.77 | 519 |
-| LSTM (128 hidden, 2 layers, early stopping) | 23.45 | 18.05 | 1050 |
+| XGBoost (300 trees, window=30) | **16.80** ✅ | 12.77 | **519** ✅ |
+| LSTM (128 hidden, 2 layers, LR scheduler) | 22.43 | 17.33 | 1170 |
 
 **Why XGBoost beats LSTM on FD001:** FD001 is a single operating condition, single fault mode dataset — the degradation trajectory is smooth and consistent across engines. XGBoost captures this well by learning from the full 30-cycle flattened feature vector. LSTMs typically outperform tree models on FD002/FD003/FD004, which have multiple operating conditions and more complex temporal patterns where sequence memory matters.
+
+**NASA score matters more than RMSE operationally:** The asymmetric NASA score penalizes late predictions (optimistic about remaining life) much harder than early ones. LSTM 1170 vs XGBoost 519 means the LSTM skews toward predicting longer remaining life than actual — the dangerous direction for maintenance scheduling. XGBoost is both more accurate and safer on this dataset.
 
 ### CWRU Bearing Fault Detection
 
