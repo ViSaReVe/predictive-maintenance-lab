@@ -1,0 +1,53 @@
+version: "3.9"
+
+# Local production-like stack:
+#   mlflow  — experiment tracking UI + model registry  (http://localhost:5000)
+#   api     — FastAPI inference service                (http://localhost:8000)
+#
+# Usage:
+#   docker compose up          # start both services
+#   docker compose up mlflow   # start MLflow only (for training runs)
+#   docker compose down        # stop and remove containers
+
+services:
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.13.0
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow          # persist runs and registered models
+    command: >
+      mlflow server
+        --host 0.0.0.0
+        --port 5000
+        --backend-store-uri /mlflow/mlruns
+        --default-artifact-root /mlflow/artifacts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    volumes:
+      - ./data:/app/data:ro           # read-only access to raw data
+      - ./configs:/app/configs:ro     # config files
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mlflow_data:

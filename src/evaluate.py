@@ -1,12 +1,11 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from sklearn.metrics import (
-    precision_recall_curve,
     average_precision_score,
-    mean_squared_error,
     mean_absolute_error,
+    mean_squared_error,
+    precision_recall_curve,
 )
-
 
 # ── Regression metrics (CMAPSS RUL) ──────────────────────────────────────────
 
@@ -69,7 +68,9 @@ def plot_threshold_tradeoff(thresh, far, mfr, title: str = 'Threshold Tradeoff')
     return fig
 
 
-def plot_rul_predictions(y_true_list: list, y_pred_list: list, title: str = 'RUL Predictions vs True'):
+def plot_rul_predictions(
+    y_true_list: list, y_pred_list: list, title: str = "RUL Predictions vs True"
+):
     """
     Plot predicted vs. true RUL for a list of engines.
 

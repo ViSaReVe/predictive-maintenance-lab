@@ -1,0 +1,31 @@
+# CWRU Bearing Fault Detection Configuration
+
+data:
+  data_dir: data/cwru
+
+preprocessing:
+  window_size: 2048     # Vibration window in samples
+  stride: 512           # Stride for sliding windows
+  train_fraction: 0.6   # Position-based split: first 60% of normal signal is train
+
+features:
+  # Time-domain and spectral features extracted per window
+  use: [rms, kurtosis, peak_to_peak, spectral_entropy]
+
+isolation_forest:
+  n_estimators: 200
+  contamination: 0.01   # Assumed fraction of anomalies in normal training data
+  random_state: 42
+
+one_class_svm:
+  kernel: rbf
+  nu: 0.05
+
+anomaly:
+  # Score threshold for flagging anomaly (set from PR-curve analysis)
+  # null = auto-set to 95th percentile of training reconstruction errors
+  threshold: null
+
+output:
+  model_dir: models
+  reports_dir: reports

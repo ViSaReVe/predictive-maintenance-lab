@@ -1,0 +1,16 @@
+data/
+.venv/
+notebooks/
+PdM_RULPrediction/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+.git/
+BUILD.md
+artifacts/
+models/
+logs/
+reports/
+mlruns/
+*.ipynb_checkpoints

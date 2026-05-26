@@ -1,3 +1,4 @@
+# Core ML / data
 numpy>=1.24
 pandas>=2.0
 scipy>=1.10
@@ -7,7 +8,20 @@ seaborn>=0.12
 torch>=2.0
 xgboost>=1.7
 imbalanced-learn>=0.11
+pyyaml>=6.0
+
+# MLOps
+mlflow>=2.10
+
+# API serving
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.0
+
+# Notebook
 jupyter>=1.0
 ipykernel>=6.0
+
+# Utilities
 requests>=2.31
 tqdm>=4.65

@@ -4,7 +4,6 @@ import torch.nn as nn
 from sklearn.ensemble import IsolationForest
 from sklearn.svm import OneClassSVM
 
-
 # ── Conv1d Autoencoder (anomaly detection) ────────────────────────────────────
 
 class ConvAutoencoder(nn.Module):
@@ -150,8 +149,9 @@ def train_lstm(
     -------
     train_losses : list of per-epoch train RMSE values (in cycle units)
     """
-    from torch.utils.data import DataLoader, TensorDataset
     import copy
+
+    from torch.utils.data import DataLoader, TensorDataset
 
     model = model.to(device)
 
@@ -200,7 +200,7 @@ def train_lstm(
             val_rmse = float(torch.sqrt(criterion(val_pred, yv_t)).item())
 
         if (epoch + 1) % 10 == 0:
-            print(f"  Epoch {epoch+1:3d}/{epochs}  train={train_rmse:.2f}  val={val_rmse:.2f} cycles")
+            print(f"  Epoch {epoch+1:3d}/{epochs}  train={train_rmse:.2f}  val={val_rmse:.2f}")
 
         # ── LR scheduler ──
         scheduler.step(val_rmse)

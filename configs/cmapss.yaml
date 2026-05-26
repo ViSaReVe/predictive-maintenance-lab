@@ -1,0 +1,33 @@
+# CMAPSS FD001 — RUL Prediction Configuration
+
+data:
+  subset: FD001
+  data_dir: data/cmapss
+
+preprocessing:
+  rul_cap: 125          # Piecewise-linear RUL cap; focuses model on degradation zone
+  window_size: 30       # Sliding window length in cycles
+  stride: 1             # Stride for training windows (1 = fully overlapping)
+  baseline_cycles: 30   # Per-engine normalization uses first N cycles as healthy baseline
+
+xgboost:
+  n_estimators: 300
+  max_depth: 6
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  random_state: 42
+
+lstm:
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+  batch_size: 256
+  epochs: 50
+  learning_rate: 0.001
+  patience: 10          # Early stopping patience
+  val_split: 0.15
+
+output:
+  model_dir: models
+  reports_dir: reports
