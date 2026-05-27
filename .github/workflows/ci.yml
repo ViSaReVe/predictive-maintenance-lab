@@ -59,14 +59,16 @@ jobs:
       - name: Build Docker image
         run: docker build -t pdm-api:${{ github.sha }} .
 
-      - name: Smoke test — container starts and responds
+      - name: Smoke test — models load and API responds
         run: |
           docker run -d --name pdm-smoke \
-            -e MLFLOW_TRACKING_URI=http://localhost:5000 \
+            -e MODEL_DIR=models \
+            -e TRAIN_ENABLED=false \
             -p 8000:8000 \
             pdm-api:${{ github.sha }}
-          sleep 5
-          # The API will fail to load models (no MLflow in CI), but should still start
-          # and return a response on /
-          curl --retry 5 --retry-delay 3 --retry-connrefused http://localhost:8000/ || true
-          docker stop pdm-smoke || true
+          sleep 8
+          HEALTH=$(curl -sf --retry 5 --retry-delay 3 --retry-connrefused http://localhost:8000/ || echo "failed")
+          echo "$HEALTH"
+          echo "$HEALTH" | grep -q '"cmapss_rul":"loaded"' || (echo "ERROR: CMAPSS model not loaded" && exit 1)
+          echo "$HEALTH" | grep -q '"cwru_anomaly":"loaded"' || (echo "ERROR: CWRU model not loaded" && exit 1)
+          docker stop pdm-smoke

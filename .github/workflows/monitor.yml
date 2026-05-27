@@ -1,0 +1,45 @@
+name: Drift Monitor
+
+# Runs weekly and on manual trigger.
+# Uses synthetic data (no real .mat files needed) — validates the monitoring
+# pipeline works and uploads the drift report as a downloadable artifact.
+on:
+  schedule:
+    - cron: "0 9 * * 1"  # Every Monday 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  drift-report:
+    name: Feature Drift Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install numpy pandas scipy evidently
+
+      - name: Run drift report (synthetic data)
+        run: python monitoring/drift_report.py
+
+      - name: Run score monitor (synthetic — model required)
+        run: |
+          # Score monitor needs the trained model — skip if not present
+          if [ -f models/cwru_anomaly_isoforest.joblib ]; then
+            python monitoring/score_monitor.py
+          else
+            echo "Model files not in repo — skipping score monitor (run locally after training)"
+          fi
+
+      - name: Upload drift report
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report-${{ github.run_id }}
+          path: reports/
+          retention-days: 30

@@ -23,6 +23,9 @@ slowapi>=0.1.9
 jupyter>=1.0
 ipykernel>=6.0
 
+# Monitoring
+evidently>=0.4
+
 # Utilities
 requests>=2.31
 tqdm>=4.65
