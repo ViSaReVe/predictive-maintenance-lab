@@ -61,12 +61,24 @@ Two complementary industrial ML problems, productionized end-to-end:
 │                                                             │
 │  POST /predict/rul      ──► XGBoost RUL prediction          │
 │  POST /predict/anomaly  ──► Isolation Forest scoring        │
-│  POST /train            ──► trigger retraining              │
+│  POST /train            ──► disabled in prod (403)          │
 │  GET  /docs             ──► Swagger UI                      │
 └─────────────────────────────────────────────────────────────┘
                               │
                      Docker + Azure Container Apps
                      (live at canadacentral)
+                              │
+                              │ production features (CSV)
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Drift Monitoring                          │
+│  python monitoring/drift_report.py                          │
+│  python monitoring/score_monitor.py                         │
+│                                                             │
+│  Evidently drift report ──► reports/drift_report.html       │
+│  Score distribution    ──► reports/score_summary.json       │
+│  GitHub Actions        ──► weekly scheduled run             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -118,10 +130,11 @@ Near-perfect PR-AUC reflects CWRU's controlled lab conditions — consistent fau
 |-------|-----------|
 | Modeling | XGBoost, Isolation Forest, PyTorch LSTM, Conv1d Autoencoder |
 | Experiment tracking | MLflow (sqlite backend, model registry, @champion alias) |
-| Inference API | FastAPI + Pydantic + uvicorn |
+| Inference API | FastAPI + Pydantic + uvicorn + slowapi rate limiting |
 | Containerization | Docker (multi-stage), Docker Compose |
-| Cloud deployment | Azure Container Apps (canadacentral) |
-| CI/CD | GitHub Actions (lint → test → docker build) |
+| Cloud deployment | Azure Container Apps (canadacentral, scale-to-zero) |
+| CI/CD | GitHub Actions (lint → test → docker build + model load assertion) |
+| Drift monitoring | Evidently (feature drift report + score distribution tracker) |
 | Testing | pytest, 46 tests, synthetic fixtures (no data files in CI) |
 | Linting | ruff |
 
@@ -158,6 +171,20 @@ uvicorn api.app:app --reload
 **Run tests:**
 ```bash
 pytest tests/ -v
+```
+
+**Run drift monitoring:**
+```bash
+# Synthetic demo (no data files needed):
+python monitoring/drift_report.py
+
+# With real CWRU data (compares train half vs test half of normal signal):
+python monitoring/drift_report.py --reference data/cwru/ --current data/cwru/
+# → reports/drift_report.html  (open in browser)
+
+# Anomaly score distribution over a feature CSV:
+python monitoring/score_monitor.py --features path/to/features.csv
+# → reports/score_summary.json
 ```
 
 ---
@@ -204,6 +231,6 @@ Sensor (accelerometer, 12 kHz)
 
 - **Streaming inference:** Kafka/Kinesis consumer updating a ring buffer per asset instead of batch CSV
 - **Managed retraining:** Azure ML pipelines triggered when technician-confirmed label accumulation exceeds threshold
-- **Drift monitoring:** KL divergence of input feature distributions week-over-week; alert on distribution shift
 - **Per-asset models:** Hierarchical model (global prior + per-asset fine-tuning) for a real fleet with individual wear histories
 - **Explainability:** SHAP values on Isolation Forest features so technicians see "kurtosis spike drove this alarm"
+- **Drift alerting:** Wire Evidently drift report to PagerDuty/Teams webhook; current implementation generates reports but does not push alerts
