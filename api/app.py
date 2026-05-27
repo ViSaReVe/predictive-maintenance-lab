@@ -21,9 +21,12 @@ import joblib
 import mlflow.pyfunc
 import mlflow.sklearn
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from mlflow.tracking import MlflowClient
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from api.schemas import (
     AnomalyRequest,
@@ -35,6 +38,9 @@ from api.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ── Rate limiter ───────────────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 # MODEL_DIR: set this env var in cloud to load baked-in joblib files.
@@ -128,6 +134,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -139,7 +148,8 @@ app.add_middleware(
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
 @app.get("/", tags=["health"])
-def health():
+@limiter.limit("60/minute")
+def health(request: Request):
     """Health check — shows which models are loaded."""
     return {
         "status": "ok",
@@ -152,7 +162,8 @@ def health():
 
 
 @app.post("/predict/rul", response_model=RULResponse, tags=["inference"])
-def predict_rul(req: RULRequest):
+@limiter.limit("20/minute")
+def predict_rul(request: Request, req: RULRequest):
     """
     Predict Remaining Useful Life for one or more sensor windows.
 
@@ -183,7 +194,8 @@ def predict_rul(req: RULRequest):
 
 
 @app.post("/predict/anomaly", response_model=AnomalyResponse, tags=["inference"])
-def predict_anomaly(req: AnomalyRequest):
+@limiter.limit("20/minute")
+def predict_anomaly(request: Request, req: AnomalyRequest):
     """
     Score a bearing vibration window for anomaly.
 
@@ -220,14 +232,18 @@ def predict_anomaly(req: AnomalyRequest):
 
 
 @app.post("/train", response_model=TrainResponse, tags=["training"])
-def train(req: TrainRequest):
+@limiter.limit("1/hour")
+def train(request: Request, req: TrainRequest):
     """
     Trigger the full training pipeline (CMAPSS + CWRU).
-    Logs experiments to MLflow, registers champion models.
-
-    Note: training is synchronous and may take 1-3 minutes.
-    Refresh the API (restart uvicorn) after training to reload the new champion models.
+    Disabled in production (set TRAIN_ENABLED=false). Run locally instead.
     """
+    if os.getenv("TRAIN_ENABLED", "false").lower() != "true":
+        raise HTTPException(
+            status_code=403,
+            detail="Training is disabled in this deployment. Run 'python main.py' locally.",
+        )
+
     from pipelines.train import run as run_pipeline
 
     try:

@@ -17,6 +17,7 @@ mlflow>=2.10
 fastapi>=0.110
 uvicorn[standard]>=0.29
 pydantic>=2.0
+slowapi>=0.1.9
 
 # Notebook
 jupyter>=1.0
