@@ -13,7 +13,7 @@ class RULRequest(BaseModel):
     windows: list[list[float]] = Field(
         ...,
         description="One or more sensor windows. Each flat: window_size × n_sensors values.",
-        example=[[0.1, 0.2, 0.3] * 30],  # 30 timesteps × 3 sensors (simplified)
+        example=[[0.05] * 510],  # 30 timesteps × 17 sensors = 510 values
     )
     engine_id: Optional[str] = Field(None, description="Optional engine identifier")
 

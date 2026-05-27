@@ -9,7 +9,7 @@ __pycache__/
 .git/
 BUILD.md
 artifacts/
-models/
+# models/ is intentionally included — joblib files baked into image for cloud deployment
 logs/
 reports/
 mlruns/

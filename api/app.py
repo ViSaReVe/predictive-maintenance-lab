@@ -10,11 +10,14 @@ Mirrors the pattern from reference MLOps repo:
 Models are loaded from the MLflow Model Registry at startup.
 """
 
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
+import joblib
 import mlflow.pyfunc
 import mlflow.sklearn
 import numpy as np
@@ -34,7 +37,10 @@ from api.schemas import (
 logger = logging.getLogger(__name__)
 
 # ── Config ─────────────────────────────────────────────────────────────────────
+# MODEL_DIR: set this env var in cloud to load baked-in joblib files.
+# Falls back to MLflow registry for local development.
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
+MODEL_DIR = os.getenv("MODEL_DIR", "models")
 CMAPSS_MODEL_NAME = "pdm-cmapss-rul-xgboost"
 CWRU_MODEL_NAME = "pdm-cwru-anomaly-isoforest"
 
@@ -42,58 +48,70 @@ CWRU_MODEL_NAME = "pdm-cwru-anomaly-isoforest"
 _models: dict = {}
 
 
-def _load_model(name: str, as_sklearn: bool = False) -> Optional[object]:
-    """Load model from MLflow registry — tries @champion alias, then latest version."""
+def _load_from_files() -> bool:
+    """Try loading models from joblib files in MODEL_DIR. Returns True on success."""
+    cmapss_path = Path(MODEL_DIR) / "cmapss_rul_xgboost.joblib"
+    cwru_path = Path(MODEL_DIR) / "cwru_anomaly_isoforest.joblib"
+    threshold_path = Path(MODEL_DIR) / "cwru_threshold.json"
+    if not (cmapss_path.exists() and cwru_path.exists()):
+        return False
+    _models["cmapss"] = joblib.load(cmapss_path)
+    _models["cwru"] = joblib.load(cwru_path)
+    _models["cmapss_version"] = "file"
+    _models["cwru_version"] = "file"
+    _models["cwru_threshold"] = (
+        json.loads(threshold_path.read_text())["threshold"]
+        if threshold_path.exists()
+        else 0.0
+    )
+    logger.info(f"Loaded models from {MODEL_DIR}/")
+    return True
+
+
+def _load_from_mlflow() -> None:
+    """Load models from MLflow registry (local dev path)."""
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    loader = mlflow.sklearn.load_model if as_sklearn else mlflow.pyfunc.load_model
-    for uri in [f"models:/{name}@champion", f"models:/{name}/latest"]:
-        try:
-            model = loader(uri)
-            logger.info(f"Loaded model '{name}' from {uri}")
-            return model
-        except Exception as e:
-            logger.debug(f"Could not load from {uri}: {e}")
-    logger.warning(f"Model '{name}' not found in registry — predictions will fail")
-    return None
 
-
-def _get_model_version(name: str) -> Optional[str]:
-    try:
-        client = MlflowClient(tracking_uri=MLFLOW_TRACKING_URI)
-        versions = client.search_model_versions(f"name='{name}'")
-        return str(versions[0].version) if versions else None
-    except Exception:
+    def _load(name: str, as_sklearn: bool = False) -> Optional[object]:
+        loader = mlflow.sklearn.load_model if as_sklearn else mlflow.pyfunc.load_model
+        for uri in [f"models:/{name}@champion", f"models:/{name}/latest"]:
+            try:
+                m = loader(uri)
+                logger.info(f"Loaded '{name}' from {uri}")
+                return m
+            except Exception as e:
+                logger.debug(f"Could not load {uri}: {e}")
+        logger.warning(f"Model '{name}' not found — predictions will fail")
         return None
 
+    _models["cmapss"] = _load(CMAPSS_MODEL_NAME)
+    _models["cwru"] = _load(CWRU_MODEL_NAME, as_sklearn=True)
 
-def _get_cwru_threshold() -> float:
-    """Retrieve the deployed anomaly threshold logged as a param in the champion run."""
     try:
         client = MlflowClient(tracking_uri=MLFLOW_TRACKING_URI)
-        versions = client.search_model_versions(f"name='{CWRU_MODEL_NAME}'")
-        if not versions:
-            return 0.0
-        run_id = versions[0].run_id
-        run = client.get_run(run_id)
-        threshold = run.data.params.get("deployed_threshold")
-        if threshold is not None:
-            return float(threshold)
+        cv = client.search_model_versions(f"name='{CMAPSS_MODEL_NAME}'")
+        _models["cmapss_version"] = str(cv[0].version) if cv else None
+        wv = client.search_model_versions(f"name='{CWRU_MODEL_NAME}'")
+        _models["cwru_version"] = str(wv[0].version) if wv else None
+        if wv:
+            run = client.get_run(wv[0].run_id)
+            t = run.data.params.get("deployed_threshold")
+            _models["cwru_threshold"] = float(t) if t else 0.0
+        else:
+            _models["cwru_threshold"] = 0.0
     except Exception as e:
-        logger.warning(f"Could not load CWRU threshold: {e}")
-    return 0.0
+        logger.warning(f"Could not load metadata from MLflow: {e}")
+        _models.setdefault("cwru_threshold", 0.0)
+
+    logger.info(f"CWRU threshold: {_models.get('cwru_threshold', 0.0):.6f}")
 
 
 # ── Lifespan: load models on startup ──────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Loading models from MLflow registry...")
-    _models["cmapss"] = _load_model(CMAPSS_MODEL_NAME)
-    _models["cwru"] = _load_model(CWRU_MODEL_NAME, as_sklearn=True)
-    # Cache model versions + CWRU anomaly threshold for response metadata
-    _models["cmapss_version"] = _get_model_version(CMAPSS_MODEL_NAME)
-    _models["cwru_version"] = _get_model_version(CWRU_MODEL_NAME)
-    _models["cwru_threshold"] = _get_cwru_threshold()
-    logger.info(f"CWRU anomaly threshold: {_models['cwru_threshold']:.6f}")
+    if not _load_from_files():
+        logger.info("No model files found — loading from MLflow registry...")
+        _load_from_mlflow()
     logger.info("Models loaded. API ready.")
     yield
     _models.clear()

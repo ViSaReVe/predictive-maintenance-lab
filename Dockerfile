@@ -28,6 +28,9 @@ COPY src/ src/
 COPY api/ api/
 COPY pipelines/ pipelines/
 COPY configs/ configs/
+COPY models/ models/
+
+ENV MODEL_DIR=models
 
 # Expose API port
 EXPOSE 8000
