@@ -6,3 +6,8 @@ __pycache__/
 *.mat
 BUILD.md
 .ipynb_checkpoints/
+mlflow.db
+mlruns/
+reports/
+PdM_RULPrediction/
+download_cwru.sh
